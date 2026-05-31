@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>软件站管理后台 | 轻量可视化</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Microsoft YaHei', Roboto, system-ui, sans-serif;
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s;
+        }
+
+        :root {
+            --bg-body: #f1f5f9;
+            --card-bg: #ffffff;
+            --border-light: #e9edf2;
+            --text-primary: #1e2a3e;
+            --text-secondary: #5b6e8c;
+            --panel-header: #1f2f49;
+            --table-header-bg: #f8fafd;
+            --table-border: #e2edf2;
+            --btn-outline-bg: #ffffff;
+            --btn-outline-border: #dce3ec;
+            --input-bg: #ffffff;
+            --input-border: #cfdfed;
+            --modal-bg: white;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+            --accent-primary: #2c3e66;
+            --accent-success: #2c6e4f;
+            --delete-bg: #fee2e2;
+            --delete-color: #b91c1c;
+            --arrow-btn-bg: #f0f4f8;
+            --arrow-btn-color: #475569;
+        }
+
+        body.dark {
+            --bg-body: #0f1724;
+            --card-bg: #1e293b;
+            --border-light: #2d3a4f;
+            --text-primary: #e2edf7;
+            --text-secondary: #94a3b8;
+            --panel-header: #cbd5e6;
+            --table-header-bg: #111827;
+            --table-border: #2d3a4f;
+            --btn-outline-bg: #1e293b;
+            --btn-outline-border: #3b4a62;
+            --input-bg: #0f172a;
+            --input-border: #334155;
+            --modal-bg: #1e293b;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+            --accent-primary: #3b5a8c;
+            --accent-success: #3b8262;
+            --delete-bg: #3b1e1e;
+            --delete-color: #f87171;
+            --arrow-btn-bg: #2d3a4f;
+            --arrow-btn-color: #cbd5e6;
+        }
+
+        body {
+            background: var(--bg-body);
+            padding: 24px 20px 48px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+
+        .header-section {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 1.2rem 1.8rem;
+            margin-bottom: 1.8rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-light);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-left h1 {
+            font-size: 1.65rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.2px;
+        }
+        .tip-text {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            margin-top: 6px;
+        }
+        .theme-toggle {
+            background: var(--btn-outline-bg);
+            border: 1px solid var(--btn-outline-border);
+            border-radius: 40px;
+            padding: 8px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            transition: 0.2s;
+        }
+        .theme-toggle:hover {
+            background: var(--border-light);
+        }
+
+        .action-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .btn {
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: 0.2s;
+            background: var(--btn-outline-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--btn-outline-border);
+        }
+        .btn-primary {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+        .btn-success {
+            background: var(--accent-success);
+            border-color: var(--accent-success);
+            color: white;
+        }
+        .btn-outline:hover {
+            background: var(--border-light);
+        }
+
+        .data-panel {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 1.2rem 1.2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-light);
+        }
+        .data-panel h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            data-color: var(--panel-header);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .sort-desc {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 18px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        table th {
+            text-align: left;
+            padding: 14px 12px;
+            background: var(--table-header-bg);
+            color: var(--text-primary);
+            font-weight: 600;
+            border-bottom: 1px solid var(--table-border);
+        }
+        table td {
+            padding: 14px 12px;
+            border-bottom: 1px solid var(--table-border);
+            vertical-align: middle;
+            color: var(--text-primary);
+        }
+        .logo-preview {
+            width: 44px;
+            height: 44px;
+            object-fit: contain;
+            background: #0f172a00;
+            border-radius: 10px;
+            padding: 4px;
+        }
+        .small-btn {
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            border-radius: 32px;
+            margin: 0 4px 0 0;
+        }
+        .btn-delete {
+            background: var(--delete-bg);
+            border-color: var(--delete-bg);
+            color: var(--delete-color);
+        }
+        .btn-arrow {
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            background: var(--arrow-btn-bg);
+            color: var(--arrow-btn-color);
+            border: none;
+            cursor: pointer;
+            margin: 0 2px;
+        }
+        .btn-arrow:hover {
+            filter: brightness(0.95);
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-box {
+            background: var(--modal-bg);
+            width: 520px;
+            max-width: 90vw;
+            border-radius: 28px;
+            padding: 1.6rem 1.8rem;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-light);
+        }
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+        .close {
+            position: absolute;
+            right: 1.5rem;
+            top: 1rem;
+            font-size: 26px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .form-item {
+            margin-bottom: 1rem;
+        }
+        .form-item label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }
+        .form-item input, .form-item select, .form-item textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 16px;
+            font-size: 0.85rem;
+            background: var(--input-bg);
+            color: var(--text-primary);
+        }
+        .empty-row td {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        footer {
+            text-align: center;
+            margin-top: 28px;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+        #fileInput { display: none; }
+        @media (min-width: 1024px) {
+            table td, table th { padding: 16px 14px; }
+            .logo-preview { width: 48px; height: 48px; }
+        }
+        @media (max-width: 680px) {
+            .header-section { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .theme-toggle { align-self: flex-end; margin-top: -8px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-section">
+        <div class="header-left">
+            <h1>软件下载站 · 管理后台</h1>
+            <div class="tip-text">数据本地存储 | 添加/编辑/删除 | 导入/导出JSON数据</div>
+        </div>
+        <div class="theme-toggle" id="themeToggleBtn">
+            <span id="themeIcon">🌞</span>
+            <span id="themeText">白天模式</span>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn btn-primary" onclick="openAddModal()">+ 添加软件</button>
+        <button class="btn btn-success" onclick="importJsonData()">导入数据</button>
+        <button class="btn btn-success" onclick="exportJsonData()">导出数据</button>
+    </div>
+
+    <div class="data-panel">
+        <h3>软件列表 <span class="sort-desc">点击上下箭头调整排序</span></h3>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr><th>图标</th><th>软件名称</th><th>分类/标签</th><th>操作</th></tr>
+                </thead>
+                <tbody id="softwareTable"></tbody>
+            </table>
+        </div>
+    </div>
+    <footer>后台修改实时保存，导出数据可直接放入主页代码使用</footer>
+</div>
+
+<input type="file" id="fileInput" accept=".json">
+
+<div class="modal" id="modal">
+    <div class="modal-box">
+        <div class="close" onclick="closeModal()">&times;</div>
+        <div class="modalTitle" id="modalTitle">软件信息</div>
+        <input type="hidden" id="editId">
+        <div class="form-item">
+            <label>软件名称</label>
+            <input id="name" placeholder="例：微信" autocomplete="off">
+        </div>
+        <div class="form-item">
+            <label>LOGO (图片URL 或 Base64)</label>
+            <textarea id="logo" rows="2" placeholder="https://... 或 data:image/png;base64,..."></textarea>
+        </div>
+        <div class="form-item">
+            <label>下载链接</label>
+            <input id="link" placeholder="https://www.example.com/download">
+        </div>
+        <div class="form-item">
+            <label>主分类</label>
+            <select id="cate">
+                <option value="social">社交聊天</option>
+                <option value="remote">远程工具</option>
+                <option value="browser">浏览器</option>
+                <option value="office">办公软件</option>
+                <option value="media">影音播放</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label>额外标签（可多选，导出主页显示）</label>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-primary);">
+                    <input type="checkbox" id="tag_recommend" value="recommend"> 推荐
+                </label>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+            <button class="btn btn-outline" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveSoftware()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function initAdminTheme() {
+        const saved = localStorage.getItem('admin_theme');
+        const isDark = saved === 'dark';
+        if (isDark) document.body.classList.add('dark');
+        else document.body.classList.remove('dark');
+        updateThemeUI(isDark);
+        const btn = document.getElementById('themeToggleBtn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                const nowDark = document.body.classList.contains('dark');
+                if (nowDark) {
+                    document.body.classList.remove('dark');
+                    localStorage.setItem('admin_theme', 'light');
+                    updateThemeUI(false);
+                } else {
+                    document.body.classList.add('dark');
+                    localStorage.setItem('admin_theme', 'dark');
+                    updateThemeUI(true);
+                }
+            });
+        }
+        function updateThemeUI(darkMode) {
+            const iconSpan = document.getElementById('themeIcon');
+            const textSpan = document.getElementById('themeText');
+            if (iconSpan && textSpan) {
+                if (darkMode) {
+                    iconSpan.innerText = '🌙';
+                    textSpan.innerText = '暗夜模式';
+                } else {
+                    iconSpan.innerText = '🌞';
+                    textSpan.innerText = '白天模式';
+                }
+            }
+        }
+    })();
+
+    let softwares = JSON.parse(localStorage.getItem('softwares') || '[]');
+    const cateDisplay = {
+        social:'社交聊天', remote:'远程工具', browser:'浏览器', office:'办公软件', media:'影音播放', recommend:'推荐'
+    };
+
+    // 上移、下移排序
+    function moveUp(index) {
+        if (index <= 0) return;
+        [softwares[index], softwares[index - 1]] = [softwares[index - 1], softwares[index]];
+        saveData();
+        renderTable();
+    }
+    function moveDown(index) {
+        if (index >= softwares.length - 1) return;
+        [softwares[index], softwares[index + 1]] = [softwares[index + 1], softwares[index]];
+        saveData();
+        renderTable();
+    }
+    function saveData() {
+        localStorage.setItem('softwares', JSON.stringify(softwares));
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('softwareTable');
+        if (!softwares.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="4">暂无软件，点击"添加软件"开始构建</td></tr>';
+            return;
+        }
+        tbody.innerHTML = softwares.map((s, idx) => {
+            const tags = s.tags || [];
+            const tagText = tags.map(t => cateDisplay[t] || '').filter(Boolean).join('、');
+            const showCate = cateDisplay[s.cate] || '未分类';
+            const cateStr = tagText ? `${showCate} / ${tagText}` : showCate;
+            return `
+            <tr data-id="${s.id}">
+                <td><img src="${s.logo}" class="logo-preview" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%2390a0b8\'%3E%3Cpath d=\'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15h-2v-2h2v2zm0-4h-2V7h2v6z\'/%3E%3C/svg%3E'"></td>
+                <td><strong>${s.name}</strong></td>
+                <td>${cateStr}</td>
+                <td>
+                    <button class="btn small-btn btn-outline" onclick="editSoftware('${s.id}')">编辑</button>
+                    <button class="btn small-btn btn-delete" onclick="delSoftware('${s.id}')">删除</button>
+                    <button class="btn-arrow" onclick="moveUp(${idx})">↑</button>
+                    <button class="btn-arrow" onclick="moveDown(${idx})">↓</button>
+                </td>
+            </tr>
+        `}).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('modalTitle').innerText = '添加软件';
+        document.getElementById('editId').value = '';
+        document.getElementById('name').value = '';
+        document.getElementById('logo').value = '';
+        document.getElementById('link').value = '';
+        document.getElementById('cate').value = 'social';
+        document.getElementById('tag_recommend').checked = false;
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    function editSoftware(id) {
+        const item = softwares.find(s => s.id == id);
+        if(!item) return;
+        document.getElementById('modalTitle').innerText = '编辑软件';
+        document.getElementById('editId').value = item.id;
+        document.getElementById('name').value = item.name;
+        document.getElementById('logo').value = item.logo;
+        document.getElementById('link').value = item.link;
+        document.getElementById('cate').value = item.cate;
+        document.getElementById('tag_recommend').checked = (item.tags || []).includes('recommend');
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    function delSoftware(id) {
+        if(!confirm('确定删除该软件吗？')) return;
+        softwares = softwares.filter(s => s.id != id);
+        saveData();
+        renderTable();
+    }
+
+    function saveSoftware() {
+        const editId = document.getElementById('editId').value;
+        const id = editId || Date.now().toString() + '_' + Math.floor(Math.random()*10000);
+        const name = document.getElementById('name').value.trim();
+        const logo = document.getElementById('logo').value.trim();
+        const link = document.getElementById('link').value.trim();
+        const cate = document.getElementById('cate').value;
+        const tags = [];
+        if(document.getElementById('tag_recommend').checked) tags.push('recommend');
+
+        if(!name) { alert('请填写软件名称'); return; }
+        if(!logo) { alert('请填写LOGO地址'); return; }
+        if(!link) { alert('请填写下载链接'); return; }
+
+        const newData = { id: id, name, logo, link, cate, tags };
+        
+        softwares = softwares.filter(s => s.id != id);
+        softwares.unshift(newData);
+
+        saveData();
+        closeModal();
+        renderTable();
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    // 导出 JSON 数据（修复：无外层多余数组）
+    function exportJsonData() {
+        const data = JSON.stringify(softwares, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'software_data.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    // 新增：JSON 数据导入
+    function importJsonData() {
+        const fileInput = document.getElementById('fileInput');
+        fileInput.onchange = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    let imported = JSON.parse(event.target.result);
+                    if (!Array.isArray(imported)) {
+                        alert('导入失败：数据格式不是数组');
+                        return;
+                    }
+                    if(confirm('导入会覆盖现有数据，确定继续吗？')) {
+                        softwares = imported;
+                        saveData();
+                        renderTable();
+                        alert('导入成功！');
+                    }
+                } catch (err) {
+                    alert('JSON 格式错误：' + err.message);
+                }
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        };
+        fileInput.click();
+    }
+
+    renderTable();
+</script>
+</body>
+</html>
