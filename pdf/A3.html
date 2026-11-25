@@ -183,6 +183,15 @@
             color: #475569;
             margin-left: auto;
         }
+        .save-dir-label {
+            font-size: 12px;
+            color: #64748b;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .save-dir-label.ok { color: #0a7c42; font-weight: 600; }
         .progress {
             width: 100%;
             height: 6px;
@@ -246,6 +255,8 @@
     <!-- 操作栏 -->
     <div class="action-bar">
         <button class="btn btn-primary" id="merge-btn" disabled>🔀 开始交替合并</button>
+        <button class="btn btn-secondary" id="save-dir-btn" title="选择一次保存目录，之后合并结果自动写入，不再弹保存框">💾 保存目录</button>
+        <span class="save-dir-label" id="save-dir-label">未选目录 · 默认直接下载</span>
         <button class="btn btn-secondary" id="clear-btn">🧹 清空列表</button>
         <span class="status" id="status-text">等待上传文件</span>
     </div>
@@ -341,6 +352,61 @@
             URL.revokeObjectURL(url);
         }
 
+        /* ============ 保存目录：选一次，之后自动写入（与 A4 一致） ============ */
+        const SAVE_DIR = { handle: null };
+
+        function updateSaveDirLabel() {
+            const lb = document.getElementById('save-dir-label');
+            if (!lb) return;
+            if (SAVE_DIR.handle) {
+                lb.textContent = '📁 ' + SAVE_DIR.handle.name + ' · 自动保存';
+                lb.classList.add('ok');
+            } else {
+                lb.textContent = '未选目录 · 默认直接下载';
+                lb.classList.remove('ok');
+            }
+        }
+
+        async function pickSaveDir(silent) {
+            if (!window.showDirectoryPicker) {
+                if (!silent) alert('当前浏览器不支持选择保存目录（建议用 Chrome / Edge），将改为直接下载。');
+                return null;
+            }
+            try {
+                SAVE_DIR.handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'pdfa3save' });
+                updateSaveDirLabel();
+                return SAVE_DIR.handle;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return null;
+                if (!silent) alert('无法写入所选目录（' + ((e && e.name) || e) + '），将改为直接下载。');
+                return null;
+            }
+        }
+
+        async function dirReady() {
+            const h = SAVE_DIR.handle;
+            if (!h) return null;
+            try {
+                if (h.queryPermission) {
+                    let st = await h.queryPermission({ mode: 'readwrite' });
+                    if (st !== 'granted' && h.requestPermission) st = await h.requestPermission({ mode: 'readwrite' });
+                    if (st !== 'granted') return null;
+                }
+            } catch (e) { return null; }
+            return h;
+        }
+
+        async function writeBlobToDir(handle, name, blob) {
+            const fh = await handle.getFileHandle(name, { create: true });
+            const w = await fh.createWritable();
+            await w.write(blob);
+            await w.close();
+        }
+
+        const saveDirBtn = document.getElementById('save-dir-btn');
+        if (saveDirBtn) saveDirBtn.addEventListener('click', () => pickSaveDir(false));
+        updateSaveDirLabel();
+
         // ---------- 渲染文件列表 ----------
         function renderFileList() {
             if (pdfFiles.length === 0) {
@@ -422,6 +488,9 @@
         async function performAlternateMerge() {
             if (pdfFiles.length < 2) return;
 
+            // 第一次使用时选一次保存目录（后续自动写入，不再弹保存框）
+            if (!SAVE_DIR.handle && window.showDirectoryPicker) { await pickSaveDir(true); }
+
             mergeBtn.disabled = true;
             clearBtn.disabled = true;
             statusText.textContent = '正在进行交替合并... 请稍候';
@@ -481,9 +550,14 @@
                 // 第四步：保存并下载
                 const mergedBytes = await mergedPdf.save();
                 const blob = new Blob([mergedBytes], { type: 'application/pdf' });
-                downloadBlob(blob, '交替合并.pdf');
-
-                statusText.textContent = `✅ 合并完成！共 ${copiedCount} 页`;
+                const dir = await dirReady();
+                if (dir) {
+                    await writeBlobToDir(dir, '交替合并.pdf', blob);
+                    statusText.textContent = `✅ 合并完成！共 ${copiedCount} 页，已自动保存到「${dir.name}」`;
+                } else {
+                    downloadBlob(blob, '交替合并.pdf');
+                    statusText.textContent = `✅ 合并完成！共 ${copiedCount} 页`;
+                }
             } catch (error) {
                 console.error('交替合并失败:', error);
                 statusText.textContent = `❌ 失败: ${error.message}`;

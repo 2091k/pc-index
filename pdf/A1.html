@@ -73,6 +73,9 @@
         .header { background:var(--card-bg); border-bottom:1px solid var(--border); padding:0 24px; position:sticky; top:0; z-index:100; box-shadow:var(--shadow-sm); }
         .header-inner { max-width:1300px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; height:60px; flex-wrap:wrap; gap:8px; }
         .logo { font-weight:700; font-size:1.3rem; color:var(--text); white-space:nowrap; }
+        .save-dir-wrap { display:flex; align-items:center; gap:8px; min-width:0; }
+        .save-dir-label { font-size:0.78rem; color:var(--text-secondary); max-width:210px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .save-dir-label.ok { color:#0a7c42; font-weight:600; }
         .tab-nav { display:flex; gap:4px; background:#f1f5f9; border-radius:28px; padding:4px; flex-wrap:wrap; }
         .tab-btn { padding:8px 16px; border-radius:24px; border:none; cursor:pointer; font-size:0.85rem; font-weight:500; background:transparent; color:var(--text-secondary); transition:var(--transition); white-space:nowrap; font-family:var(--font); }
         .tab-btn.active { background:#fff; color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,0.06); font-weight:600; }
@@ -156,6 +159,10 @@
                 <button class="tab-btn" data-tab="tab-img2pdf">🧩 图片转PDF</button>
                 <button class="tab-btn" data-tab="tab-manage">📑 页面重排</button>
             </nav>
+            <div class="save-dir-wrap">
+                <button class="btn btn-sm" id="save-dir-btn" title="选择一次保存目录，之后所有导出文件自动写入该目录，不再逐个弹出保存框">💾 保存目录</button>
+                <span class="save-dir-label" id="save-dir-label">未选目录 · 默认直接下载</span>
+            </div>
         </div>
     </header>
     <div class="main-container">
@@ -383,6 +390,63 @@
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setTimeout(()=>URL.revokeObjectURL(url),1000);
         }
+
+        /* ==================== 保存目录：选一次，之后自动写入（与 A4 一致） ==================== */
+        const SAVE_DIR = { handle: null };
+
+        function updateSaveDirLabel(){
+            const lb = document.getElementById('save-dir-label');
+            if(!lb) return;
+            if(SAVE_DIR.handle){ lb.textContent = '📁 ' + SAVE_DIR.handle.name + ' · 自动保存'; lb.classList.add('ok'); }
+            else { lb.textContent = '未选目录 · 默认直接下载'; lb.classList.remove('ok'); }
+        }
+
+        async function pickSaveDir(silent){
+            if(!window.showDirectoryPicker){
+                if(!silent) alert('当前浏览器不支持选择保存目录（建议用 Chrome / Edge），将改为直接下载。');
+                return null;
+            }
+            try{
+                SAVE_DIR.handle = await window.showDirectoryPicker({ mode:'readwrite', id:'pdf7in1save' });
+                updateSaveDirLabel();
+                return SAVE_DIR.handle;
+            }catch(e){
+                if(e && e.name === 'AbortError') return null;
+                if(!silent) alert('无法写入所选目录（' + ((e && e.name) || e) + '），将改为直接下载。');
+                return null;
+            }
+        }
+
+        async function dirReady(){
+            const h = SAVE_DIR.handle;
+            if(!h) return null;
+            try{
+                if(h.queryPermission){
+                    let st = await h.queryPermission({ mode:'readwrite' });
+                    if(st !== 'granted' && h.requestPermission) st = await h.requestPermission({ mode:'readwrite' });
+                    if(st !== 'granted') return null;
+                }
+            }catch(e){ return null; }
+            return h;
+        }
+
+        async function writeBlobToDir(handle, name, blob){
+            const fh = await handle.getFileHandle(name, { create:true });
+            const w = await fh.createWritable();
+            await w.write(blob);
+            await w.close();
+        }
+
+        async function saveOutput(blob, name){
+            const h = await dirReady();
+            if(h){ await writeBlobToDir(h, name, blob); return 'dir'; }
+            downloadBlob(blob, name);
+            return 'download';
+        }
+
+        const saveDirBtn = document.getElementById('save-dir-btn');
+        if(saveDirBtn) saveDirBtn.addEventListener('click', ()=>pickSaveDir(false));
+        updateSaveDirLabel();
         function getBaseName(fn) { const i=fn.lastIndexOf('.'); return i>0?fn.substring(0,i):fn; }
         function fileToArrayBuffer(file) {
             if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
@@ -483,7 +547,7 @@
                         const pages = await merged.copyPages(pdf, pdf.getPageIndices());
                         pages.forEach(p=>merged.addPage(p)); bar.style.width = ((i+1)/state.files.length*100)+'%';
                     }
-                    const bytes = await merged.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),'合并.pdf');
+                    const bytes = await merged.save(); await saveOutput(new Blob([bytes],{type:'application/pdf'}),'合并.pdf');
                     status.textContent='✅ 合并完成';
                 }catch(e){ status.textContent='❌ '+e.message; } finally{ btnMerge.disabled=false; progress.style.display='none'; }
             });
@@ -531,7 +595,7 @@
                     if(!idxs.length){status.textContent='没有符合的页面';return;}
                     const newPdf=await PDFLib.PDFDocument.create(); const pages=await newPdf.copyPages(src,idxs);
                     pages.forEach(p=>newPdf.addPage(p)); const bytes=await newPdf.save();
-                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(splitFile.name)}_${isOdd?'奇数页':'偶数页'}.pdf`);
+                    await saveOutput(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(splitFile.name)}_${isOdd?'奇数页':'偶数页'}.pdf`);
                     status.textContent=`✅ ${isOdd?'奇数页':'偶数页'}已下载`;
                 }catch(e){status.textContent='❌ '+e.message;} finally{progress.style.display='none';}
             }
@@ -551,7 +615,10 @@
             btn.addEventListener('click',async ()=>{
                 if(!splitFile) return; const mode=document.querySelector('input[name="split-mode"]:checked').value;
                 if(mode==='odd_even') return;
+                // 拆分会产生多个文件：点击时先选一次目录（后续自动写入，不再逐个弹保存框）
+                if(!SAVE_DIR.handle && window.showDirectoryPicker){ await pickSaveDir(true); }
                 btn.disabled=true; status.textContent='拆分中...'; progress.style.display='block';
+                const outputs=[];
                 try{
                     const buf=await fileToArrayBuffer(splitFile); const src=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
                     const total=src.getPageCount(); let ranges=[];
@@ -570,10 +637,23 @@
                         const pages=await newPdf.copyPages(src,idxs); pages.forEach(p=>newPdf.addPage(p));
                         const bytes=await newPdf.save(); const base=getBaseName(splitFile.name);
                         let suffix=''; if(mode==='range') suffix='提取页'; else if(mode==='fixed') suffix='第'+(idx+1)+'部分'; else suffix='第'+(idxs[0]+1)+'页';
-                        downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${base}_${suffix}.pdf`);
+                        outputs.push({ name:`${base}_${suffix}.pdf`, bytes });
                         bar.style.width=((idx+1)/ranges.length*100)+'%'; await new Promise(r=>setTimeout(r,50));
                     }
-                    status.textContent='✅ 完成，'+ranges.length+'个文件';
+                    const dir = await dirReady();
+                    if(dir){
+                        for(const o of outputs) await writeBlobToDir(dir, o.name, new Blob([o.bytes],{type:'application/pdf'}));
+                        status.textContent='✅ 完成，'+outputs.length+'个文件，已自动保存到「'+dir.name+'」';
+                    }else if(outputs.length===1){
+                        downloadBlob(new Blob([outputs[0].bytes],{type:'application/pdf'}), outputs[0].name);
+                        status.textContent='✅ 完成，1个文件';
+                    }else{
+                        status.textContent='正在打包ZIP...';
+                        const zip=new JSZip(); outputs.forEach(o=>zip.file(o.name,o.bytes));
+                        const zipBlob=await zip.generateAsync({type:'blob'});
+                        downloadBlob(zipBlob, getBaseName(splitFile.name)+'_拆分.zip');
+                        status.textContent='✅ 完成，'+outputs.length+'个文件（已打包为1个ZIP）';
+                    }
                 }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
             });
         })();
@@ -610,7 +690,7 @@
                         let delta=0; if(dir==='left') delta=270; else if(dir==='right') delta=90; else if(dir==='180') delta=180;
                         const newAngle = Math.round((cur + delta) % 360); page.setRotation(PDFLib.degrees(newAngle));
                     });
-                    const bytes=await pdf.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已旋转.pdf`);
+                    const bytes=await pdf.save(); await saveOutput(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已旋转.pdf`);
                     status.textContent=`✅ 已旋转 ${idxs.length} 页`;
                 }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
             });
@@ -645,7 +725,7 @@
                     if(!keep.length) throw new Error('删除后无页面');
                     const newPdf=await PDFLib.PDFDocument.create(); const pages=await newPdf.copyPages(src,keep);
                     pages.forEach(p=>newPdf.addPage(p)); const bytes=await newPdf.save();
-                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已删除.pdf`);
+                    await saveOutput(new Blob([bytes],{type:'application/pdf'}),`${getBaseName(file.name)}_已删除.pdf`);
                     status.textContent=`✅ 已删除 ${toDel.length} 页`;
                 }catch(e){status.textContent='❌ '+e.message;} finally{btn.disabled=false;progress.style.display='none';}
             });
@@ -700,7 +780,7 @@
                     await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
                 }
                 const blob=await new Promise(r=>canvas.toBlob(r,mime,qualVal));
-                downloadBlob(blob,`${name}_提取页_${n}.${fmt==='png'?'png':'jpg'}`); previewStatus.textContent = '✅ 已下载';
+                const saved=await saveOutput(blob,`${name}_提取页_${n}.${fmt==='png'?'png':'jpg'}`); previewStatus.textContent = saved==='dir'?'✅ 已保存':'✅ 已下载';
             }
             btnAll.addEventListener('click',async ()=>{
                 if(!pages.length){ status.textContent='没有页面可下载'; return; }
@@ -718,7 +798,7 @@
                     const blob=await new Promise(r=>canvas.toBlob(r,mime,qualVal));
                     zip.file(`${name}_提取页_${String(p.pageNum).padStart(3,'0')}.${ext}`,blob);
                 }
-                const zipBlob=await zip.generateAsync({type:'blob'}); downloadBlob(zipBlob,`${name}_图片集.zip`);
+                const zipBlob=await zip.generateAsync({type:'blob'}); await saveOutput(zipBlob,`${name}_图片集.zip`);
                 status.textContent='✅ 下载完成'; progress.style.display='none';
             });
             area.addEventListener('click',()=>input.click());
@@ -784,7 +864,7 @@
                         const page=pdf.addPage([595.28,841.89]); const dims=embed.scaleToFit(595.28-40,841.89-40);
                         page.drawImage(embed,{x:(595.28-dims.width)/2,y:(841.89-dims.height)/2,width:dims.width,height:dims.height});
                     }
-                    const bytes=await pdf.save(); downloadBlob(new Blob([bytes],{type:'application/pdf'}),'图片转PDF.pdf');
+                    const bytes=await pdf.save(); await saveOutput(new Blob([bytes],{type:'application/pdf'}),'图片转PDF.pdf');
                     status.textContent='✅ 导出成功';
                 }catch(e){ console.error(e); status.textContent='❌ 导出失败'; }
             });
@@ -904,7 +984,7 @@
                         else{ const src=pdfDataList[p.pdfIndex].pdfLibDoc; const [copied]=await merged.copyPages(src,[p.pageIndex]); merged.addPage(copied); }
                     }
                     const bytes=await merged.save(); const firstName=pdfDataList.length?getBaseName(pdfDataList[0].fileName):'文档';
-                    downloadBlob(new Blob([bytes],{type:'application/pdf'}),`${firstName}_页面重排.pdf`); status.textContent='✅ 导出成功';
+                    await saveOutput(new Blob([bytes],{type:'application/pdf'}),`${firstName}_页面重排.pdf`); status.textContent='✅ 导出成功';
                 }catch(e){ console.error(e); status.textContent='❌ 导出失败'; }
             });
             area.addEventListener('click',()=>input.click());

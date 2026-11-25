@@ -226,6 +226,30 @@
     .primary-btn:hover { background: #1e293b; }
     .primary-btn:disabled { opacity: 0.5; pointer-events: none; }
 
+    .secondary-btn {
+      background: #f1f5f9;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      padding: 0.6rem 1.2rem;
+      border-radius: 2rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: 0.2s;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .secondary-btn:hover { background: #e2e8f0; }
+
+    .save-dir-label {
+      font-size: 0.78rem;
+      color: #475569;
+      margin-top: 0.35rem;
+      min-height: 1rem;
+      word-break: break-all;
+    }
+    .save-dir-label.ok { color: #0a7c42; font-weight: 600; }
+
     .progress-wrap {
       background: #e2e8f0;
       border-radius: 1rem;
@@ -402,7 +426,9 @@
       <option value="4">4x 超清</option>
     </select>
 
-    <button id="splitBtn" class="primary-btn" disabled>✂️ 开始分割并下载</button>
+    <button id="splitBtn" class="primary-btn" disabled>✂️ 开始分割并保存</button>
+    <button id="saveDirBtn" class="secondary-btn" title="选择一次保存目录，之后分割结果自动写入，不再弹保存框">💾 保存目录</button>
+    <div class="save-dir-label" id="saveDirLabel">未选目录 · 默认直接下载</div>
 
     <div class="progress-wrap" id="progressWrap">
       <div class="progress-bar" id="progressBar"></div>
@@ -477,6 +503,61 @@
     const applyAllBtn = document.getElementById('applyAllBtn');
     const modeButtons = document.querySelectorAll('.mode-btn');
     const dragTooltip = document.getElementById('dragTooltip');
+
+    /* ============ 保存目录：选一次，之后自动写入（与 A4 一致） ============ */
+    const SAVE_DIR = { handle: null };
+    const saveDirBtn = document.getElementById('saveDirBtn');
+    const saveDirLabel = document.getElementById('saveDirLabel');
+
+    function updateSaveDirLabel() {
+      if (!saveDirLabel) return;
+      if (SAVE_DIR.handle) {
+        saveDirLabel.textContent = '📁 ' + SAVE_DIR.handle.name + ' · 自动保存';
+        saveDirLabel.classList.add('ok');
+      } else {
+        saveDirLabel.textContent = '未选目录 · 默认直接下载';
+        saveDirLabel.classList.remove('ok');
+      }
+    }
+
+    async function pickSaveDir(silent) {
+      if (!window.showDirectoryPicker) {
+        if (!silent) alert('当前浏览器不支持选择保存目录（建议用 Chrome / Edge），将改为直接下载。');
+        return null;
+      }
+      try {
+        SAVE_DIR.handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'pdfa2save' });
+        updateSaveDirLabel();
+        return SAVE_DIR.handle;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return null;
+        if (!silent) alert('无法写入所选目录（' + ((e && e.name) || e) + '），将改为直接下载。');
+        return null;
+      }
+    }
+
+    async function dirReady() {
+      const h = SAVE_DIR.handle;
+      if (!h) return null;
+      try {
+        if (h.queryPermission) {
+          let st = await h.queryPermission({ mode: 'readwrite' });
+          if (st !== 'granted' && h.requestPermission) st = await h.requestPermission({ mode: 'readwrite' });
+          if (st !== 'granted') return null;
+        }
+      } catch (e) { return null; }
+      return h;
+    }
+
+    async function writeBlobToDir(handle, name, blob) {
+      const fh = await handle.getFileHandle(name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(blob);
+      await w.close();
+    }
+
+    if (saveDirBtn) saveDirBtn.addEventListener('click', () => pickSaveDir(false));
+    updateSaveDirLabel();
 
     // 解析页码范围
     function parsePageRange(str, total) {
@@ -770,7 +851,7 @@
       }
     }
 
-    if (typeof pdfjsLib !== 'undefined') {
+    if (typeof pdfjsLib === 'undefined') {
       console.error('pdf.js 未加载！');
     }
 
@@ -778,6 +859,8 @@
     splitBtn.addEventListener('click', async () => {
       if (!pdfDoc || selectedPages.length === 0) return;
       if (!window.PDFLib) { alert('pdf-lib未加载'); return; }
+      // 第一次使用时选一次保存目录（后续自动写入，不再弹保存框）
+      if (!SAVE_DIR.handle && window.showDirectoryPicker) { await pickSaveDir(true); }
       splitBtn.disabled = true;
       progressWrap.style.display = 'block';
       progressBar.style.width = '0%';
@@ -840,16 +923,23 @@
         statusText.textContent = '正在生成PDF...';
         const pdfBytes = await newPdf.save();
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
         const rawName = (originalFileName || 'document').replace(/\.pdf$/i, '');
-        a.download = `${rawName}_分割.pdf`;
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        statusText.textContent = '✅ 分割完成，下载中...';
+        const outName = `${rawName}_分割.pdf`;
+        const dir = await dirReady();
+        if (dir) {
+          await writeBlobToDir(dir, outName, blob);
+          statusText.textContent = '✅ 分割完成，已自动保存到「' + dir.name + '」';
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.download = outName;
+          a.href = url;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          statusText.textContent = '✅ 分割完成，下载中...';
+        }
       } catch (err) {
         console.error(err);
         statusText.textContent = '❌ 处理失败: ' + err.message;
